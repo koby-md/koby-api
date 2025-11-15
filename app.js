@@ -1,22 +1,26 @@
-// app.js (KOBY API - مُعدل ليعرض HTML على Vercel)
+// app.js
 
+// 🚨 استخدام require للمكتبات
 const express = require('express');
 const { igdl } = require('btch-downloader'); 
-const cors = require('cors'); 
-
 const app = express();
-app.use(cors());
-app.use(express.json());
+const PORT = 3000;
+// تم حذف تعريف HOST = 'kobi.local'
+
 
 // *******************************************************************
-// 🔑 دالة المعالجة الأساسية
+// 🔑 دالة المعالجة التي تستخدم المكتبة الحقيقية
 // *******************************************************************
 async function processInstagramLink(url) {
     try {
+        // 1. إجراء استدعاء المكتبة وإرسال الرابط
         let result = await igdl(url); 
+        
+        // 2. إرجاع النتيجة مباشرة (JSON)
         return result; 
     } catch (error) {
         console.error("Error during igdl call:", error);
+        // في حالة فشل المكتبة، نُرجع كائن خطأ واضح
         return { 
             status: 'error', 
             message: 'فشل في استدعاء المكتبة الخارجية: ' + error.message 
@@ -26,99 +30,90 @@ async function processInstagramLink(url) {
 // *******************************************************************
 
 
-// 🚨 المسار الأساسي: يستقبل GET /?url= ويعرض إما الواجهة أو النتيجة المنسقة
-app.get('/', async (req, res) => {
-    const link = req.query.url; 
+// 1. إعداد الخادم لاستقبال بيانات JSON من الواجهة الأمامية
+app.use(express.json());
 
-    // ----------------------------------------------------------------
-    // 1. عرض واجهة الإدخال إذا لم يتم إرسال رابط
-    // ----------------------------------------------------------------
+// 2. الواجهة الرئيسية (GET Request) - كود HTML و CSS و JavaScript
+app.get('/', (req, res) => {
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="ar" dir="rtl">
+        <head>
+            <meta charset="UTF-8">
+            <title>معالج رابط انستغرام</title>
+            <style>
+                body { font-family: Tahoma, sans-serif; background-color: #1f2029; color: #fff; text-align: center; padding-top: 50px; }
+                .container { background: #282a36; padding: 30px; border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.5); width: 90%; max-width: 700px; margin: auto; }
+                input[type="text"] { width: 90%; padding: 12px; margin: 15px 0; border: none; border-radius: 5px; background: #3c3f50; color: #f8f8f2; }
+                button { background-color: #833AB4; color: white; padding: 12px 25px; border: none; border-radius: 5px; cursor: pointer; font-size: 1.1em; transition: background-color 0.3s; }
+                button:hover { background-color: #C13584; }
+                pre { background: #1e1e1e; color: #50fa7b; padding: 20px; border-radius: 5px; text-align: left; white-space: pre-wrap; word-wrap: break-word; margin-top: 20px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>معالج رابط انستغرام 📸</h1>
+                <p>أدخل رابط انستغرام لتحصل على نتيجة JSON.</p>
+                <form id="link-form">
+                    <input type="text" id="link-input" name="link" placeholder="الصق رابط انستغرام هنا..." required>
+                    <button type="submit">إرسال الرابط للمعالجة</button>
+                </form>
+
+                <hr style="border-color: #44475a; margin: 30px 0;">
+                <h2>النتيجة (JSON)</h2>
+                <pre id="json-result">النتيجة ستظهر هنا...</pre>
+            </div>
+
+            <script>
+                document.getElementById('link-form').addEventListener('submit', async function(event) {
+                    event.preventDefault(); 
+                    const link = document.getElementById('link-input').value;
+                    const resultElement = document.getElementById('json-result');
+                    resultElement.textContent = 'جاري المعالجة...';
+
+                    try {
+                        const response = await fetch('/process', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ link: link }),
+                        });
+
+                        const data = await response.json();
+                        resultElement.textContent = JSON.stringify(data, null, 4);
+                    } catch (error) {
+                        resultElement.textContent = '❌ حدث خطأ: ' + error.message;
+                    }
+                });
+            </script>
+        </body>
+        </html>
+    `);
+});
+
+// 3. مسار معالجة الرابط (POST Request)
+app.post('/process', async (req, res) => {
+    const link = req.body.link;
+
     if (!link) {
-        return res.send(`
-            <!DOCTYPE html>
-            <html lang="ar">
-            <head>
-                <meta charset="UTF-8">
-                <title>✨ KOBY Downloader API ✨</title>
-                <style>
-                    body { font-family: Tahoma, sans-serif; text-align: center; margin: 50px; background-color: #1a1a1a; color: #f0f0f0; }
-                    .container { background: #2c2c2c; padding: 30px; border-radius: 12px; box-shadow: 0 6px 12px rgba(0,0,0,0.4); max-width: 650px; margin: auto; }
-                    h1 { color: #87ceeb; }
-                    input[type="text"] { width: 85%; padding: 12px; margin-bottom: 20px; border: 1px solid #555; border-radius: 6px; background-color: #3e3e3e; color: #fff; }
-                    button { padding: 12px 25px; background-color: #87ceeb; color: #1a1a1a; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; transition: background-color 0.3s; }
-                    button:hover { background-color: #6a95b8; }
-                    pre { text-align: left; padding: 10px; background-color: #111; border-radius: 4px; overflow-x: auto; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <h1>✨ معالج الروابط KOBY ✨</h1>
-                    <p>الرجاء إدخال رابط الانستغرام للمعالجة:</p>
-                    <form action="/" method="GET">
-                        <input type="text" name="url" placeholder="ألصق رابط إنستغرام هنا..." required>
-                        <button type="submit">معالجة الرابط</button>
-                    </form>
-                    <p style="margin-top: 30px; font-size: 0.9em; color: #bbb;">أو استخدم الرابط مباشرة: [رابط Vercel]/?url=...</p>
-                </div>
-            </body>
-            </html>
-        `);
+        return res.status(400).json({ status: 'error', message: 'لم يتم إرسال رابط.' });
     }
 
-    // ----------------------------------------------------------------
-    // 2. معالجة الرابط وعرض النتيجة المنسقة
-    // ----------------------------------------------------------------
     try {
+        // استدعاء دالة المعالجة التي تستخدم المكتبة
         const result = await processInstagramLink(link); 
         
-        let htmlOutput = `<h1>✅ نتيجة المعالجة</h1>`;
-        htmlOutput += `<p><strong>الرابط المعالج:</strong> ${link}</p>`;
-        
-        // التحقق من وجود الوسائط وعرضها في جدول
-        if (result.medias && result.medias.length > 0) {
-            htmlOutput += '<table border="1" style="width:90%; margin: 20px auto; text-align: right; direction: rtl; border-collapse: collapse;">';
-            htmlOutput += '<tr><th style="background-color: #555; color: white; padding: 10px;">العنصر</th><th style="background-color: #555; color: white;">الرابط</th></tr>';
-            
-            result.medias.forEach((media, index) => {
-                const mediaType = media.extension === 'mp4' ? 'فيديو 🎬' : 'صورة 🖼️';
-                htmlOutput += `
-                    <tr>
-                        <td style="padding: 8px; background-color: #444;">${mediaType} #${index + 1}</td>
-                        <td style="padding: 8px; background-color: #444;"><a href="${media.url}" target="_blank" style="color: #87ceeb;">رابط التنزيل</a></td>
-                    </tr>
-                `;
-            });
-            htmlOutput += '</table>';
-        } else {
-             htmlOutput += `<p style="color: #f0f0f0;">لم يتم العثور على وسائط قابلة للتنزيل. قد تكون البيانات في القسم الخام أدناه.</p>`;
-        }
-        
-        // عرض النتيجة الخام للمطورين
-        htmlOutput += `<h2>البيانات الخام (JSON)</h2>`;
-        htmlOutput += `<pre>${JSON.stringify(result, null, 2)}</pre>`;
-
-
-        // إرسال الرد المنسق
-        res.send(
-            `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>نتيجة KOBY</title><style>
-            body { font-family: Tahoma, sans-serif; margin: 0; padding: 0; background-color: #1a1a1a; color: #f0ff0f; }
-            .container-output { background: #2c2c2c; padding: 30px; border-radius: 12px; box-shadow: 0 6px 12px rgba(0,0,0,0.4); max-width: 900px; margin: 40px auto; }
-            h1, h2 { color: #87ceeb; text-align: center; }
-            pre { text-align: left; padding: 15px; background-color: #111; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; font-size: 0.9em; }
-            table { border-collapse: collapse; }
-            a { color: #87ceeb; text-decoration: none; }
-            </style></head><body><div class="container-output">${htmlOutput}</div></body></html>`
-        );
+        // إرسال النتيجة كما هي
+        res.json(result); 
 
     } catch (error) {
-        // في حالة فشل الخادم
-        res.status(500).send(`
-            <h1>❌ خطأ في المعالجة</h1>
-            <p>فشل الخادم في معالجة طلب المكتبة. تحقق من الرابط.</p>
-            <p><strong>التفاصيل:</strong> ${error.message}</p>
-        `);
+        console.error('Processing error:', error);
+        res.status(500).json({ status: 'error', message: 'فشل الخادم في معالجة طلب المكتبة.' });
     }
 });
 
-// 🚨 تصدير التطبيق كوحدة نمطية (Module) للعمل على Vercel
-module.exports = app; 
+// 4. تشغيل الخادم (الاستماع إلى localhost)
+app.listen(PORT, () => {
+    console.log(`🚀 تم تشغيل التطبيق! افتح الرابط: http://localhost:${PORT}`);
+});
