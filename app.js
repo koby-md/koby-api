@@ -1,63 +1,86 @@
-// app.js (KOBY API - مُعدل ليعرض JSON الخام فقط)
+// app.js (جزء المسار GET /)
 
-const express = require('express');
-const { igdl } = require('btch-downloader'); 
-const cors = require('cors'); 
-
-const app = express();
-app.use(cors());
-app.use(express.json());
+// ... (جميع عمليات الاستيراد والمكتبات) ...
 
 // *******************************************************************
-// 🔑 دالة المعالجة الأساسية
-// *******************************************************************
-async function processInstagramLink(url) {
-    try {
-        let result = await igdl(url); 
-        return result; 
-    } catch (error) {
-        console.error("Error during igdl call:", error);
-        return { 
-            status: 'error', 
-            message: 'فشل في استدعاء المكتبة الخارجية: ' + error.message 
-        };
-    }
-}
-// *******************************************************************
-
-
-// 🚨 المسار الأساسي: يستقبل GET /?url= ويعرض النتيجة كـ JSON خام
+// 🚨 المسار المعدل: استقبال الرابط عبر GET مع بارامتر '?url=' وعرضه كـ HTML
 app.get('/', async (req, res) => {
-    // 🔑 الآن نستخدم req.query.url لاستقبال البارامتر
     const link = req.query.url; 
 
-    // ----------------------------------------------------------------
-    // 1. عرض رسالة ترحيب JSON إذا لم يتم إرسال رابط
-    // ----------------------------------------------------------------
+    // إذا لم يتم إرسال رابط
     if (!link) {
-        return res.json({ 
-            status: 'ready', 
-            message: 'KOBY Downloader API is running!',
-            usage: 'الرجاء إرسال الرابط باستخدام بارامتر url=...',
-            example: `https://koby-api.vercel.app/?url=INSTAGRAM_LINK_HERE`
-        });
+        // نعيد نموذج إدخال HTML بسيط أو رسالة ترحيب منسقة
+        return res.send(`
+            <!DOCTYPE html>
+            <html lang="ar">
+            <head>
+                <meta charset="UTF-8">
+                <title>معالج KOBY - API</title>
+                <style>
+                    body { font-family: Tahoma, sans-serif; text-align: center; margin: 50px; background-color: #f4f4f4; }
+                    .container { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); max-width: 600px; margin: auto; }
+                    input[type="text"] { width: 80%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
+                    button { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>✨ معالج الروابط KOBY ✨</h1>
+                    <p>الرجاء إدخال رابط الانستغرام للمعالجة:</p>
+                    <form action="/" method="GET">
+                        <input type="text" name="url" placeholder="ألصق رابط إنستغرام هنا..." required>
+                        <button type="submit">معالجة الرابط</button>
+                    </form>
+                    <p>أو استخدم الرابط مباشرة: [رابط Vercel]/?url=...</p>
+                </div>
+            </body>
+            </html>
+        `);
     }
 
-    // ----------------------------------------------------------------
-    // 2. معالجة الرابط وعرض النتيجة JSON الخام
-    // ----------------------------------------------------------------
+    // إذا تم إرسال رابط
     try {
         const result = await processInstagramLink(link); 
         
-        // 🚨 هذا هو الأمر المطلوب: إرسال النتيجة كـ JSON خام
-        res.json(result); 
+        // 🚨 هنا نقوم بتنسيق النتيجة JSON إلى HTML بدلاً من res.json(result)
+        let htmlOutput = '<h1>✅ نتيجة المعالجة</h1>';
+        htmlOutput += `<p><strong>الرابط المعالج:</strong> ${link}</p>`;
+        htmlOutput += '<table border="1" style="width:100%; text-align: right; direction: rtl;">';
+        
+        // عرض البيانات بشكل منسق (مثال لبعض الحقول)
+        if (result.medias && result.medias.length > 0) {
+            htmlOutput += '<tr><th>العنصر</th><th>الرابط</th></tr>';
+            result.medias.forEach((media, index) => {
+                htmlOutput += `
+                    <tr>
+                        <td>محتوى #${index + 1} (${media.extension})</td>
+                        <td><a href="${media.url}" target="_blank">رابط التنزيل</a></td>
+                    </tr>
+                `;
+            });
+        } else {
+             htmlOutput += `<tr><td>الحالة</td><td>نجاح (لكن لم يتم العثور على وسائط محددة أو الخطأ التالي):</td></tr>`;
+             htmlOutput += `<tr><td>البيانات الخام</td><td><pre>${JSON.stringify(result, null, 2)}</pre></td></tr>`;
+        }
+
+        htmlOutput += '</table>';
+        
+        // إرسال الرد المنسق
+        res.send(
+            `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>نتيجة KOBY</title><style>
+            body { font-family: Tahoma, sans-serif; margin: 40px; background-color: #f4f4f4; }
+            table { border-collapse: collapse; margin-top: 20px; } th, td { padding: 10px; }
+            </style></head><body>${htmlOutput}</body></html>`
+        );
 
     } catch (error) {
-        console.error('Processing error:', error);
-        // إرسال رسالة خطأ كـ JSON
-        res.status(500).json({ status: 'error', message: 'فشل الخادم في معالجة طلب المكتبة.', details: error.message });
+        // في حالة فشل الخادم
+        res.status(500).send(`
+            <h1>❌ خطأ في المعالجة</h1>
+            <p>فشل الخادم في معالجة طلب المكتبة. تحقق من الرابط.</p>
+            <p><strong>التفاصيل:</strong> ${error.message}</p>
+        `);
     }
 });
-
-// 🚨 تصدير التطبيق كوحدة نمطية (Module) للعمل على Vercel
+// ... (بقية الكود) ...
 module.exports = app; 
